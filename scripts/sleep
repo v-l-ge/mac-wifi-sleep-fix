@@ -1,0 +1,36 @@
+#!/bin/sh
+#
+# Pre-sleep hook for sleepwatcher.
+#
+# Runs immediately before macOS enters hibernate. Goal: leave the Broadcom
+# Wi-Fi chip in a clean, deterministic OFF state so that hibernate-restore
+# brings it back into a recoverable condition.
+#
+# Steps:
+#   1. networksetup -setairportpower en0 off
+#      Tells CoreWLAN to power down the Wi-Fi chip. Returns immediately,
+#      but the chip needs several seconds to actually finish shutdown.
+#
+#   2. sleep 5
+#      Wait for the chip's physical power-down sequence to complete (radio
+#      off, calibration data saved, firmware shutdown, hardware power-off).
+#      Without this pause, hibernate may snapshot the chip in a transitional
+#      state, leading to wake-time hung-on-association.
+#
+#   3. killall airportd
+#      Reset the userland Wi-Fi daemon. launchd respawns it, so by the time
+#      the system actually hibernates, airportd's state is fresh.
+#
+#   4. sleep 2
+#      Let userland settle before hibernate-image is written to disk.
+#
+# Tuning notes:
+#   - Tested values: sleep 1 (insufficient), 3 (better), 5 (current), 10 (no improvement).
+#     5 seconds appears to be at the "saturation" point — longer pauses do not
+#     measurably reduce cascade frequency.
+
+/usr/sbin/networksetup -setairportpower en0 off
+/bin/sleep 5
+/usr/bin/killall airportd 2>/dev/null
+/bin/sleep 2
+exit 0

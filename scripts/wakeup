@@ -1,0 +1,135 @@
+#!/bin/sh
+#
+# Wake hook for sleepwatcher. Multi-stage Wi-Fi recovery for the Broadcom
+# BCM43xx hung-on-association bug on Intel Macs running Monterey/Big Sur.
+#
+# Stages, in order:
+#   0. Wait 3 seconds for the chip and system to fully come out of
+#      hibernate-restore before issuing any commands.
+#   1. Bring up the interface and issue a force-disassociate (airport -z).
+#   2. Smart polling: up to 20 seconds, requires 5 consecutive seconds of
+#      stable IP before declaring success. This filter is important — DHCP
+#      can briefly assign an IP that is then NAK'd; without the stability
+#      check we would incorrectly declare success on a transient lease.
+#   3. Cascade: up to 15 attempts of {off → on + airport -z}, separated by
+#      ~10-second pauses. The airport -z (force disassociate) is the key
+#      command — without it, off→on alone does not break the driver out of
+#      a hung-on-association state.
+#   4. Last-ditch: killall airportd + bluetoothd, then one more off/on cycle.
+#   5. Patient stage: 3 additional retries with 20-second pauses, in case
+#      the driver simply needs more time to recover.
+#
+# After all stages, if Wi-Fi still has no IP, the script logs FAILED.
+# In practice this only happens during a "deep hung" — a kernel-level
+# Broadcom driver deadlock that cannot be cleared from userland. The only
+# remedy in that case is a manual reboot.
+
+LOG=/var/log/sleepwatcher.log
+AIRPORT=/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport
+TS() { date '+%F %T'; }
+
+check_ip() {
+    /sbin/ifconfig en0 2>/dev/null | /usr/bin/awk '/inet /{print $2; exit}'
+}
+
+echo "$(TS) wakeup: start" >> "$LOG"
+
+# Stage 0: pause to let the chip/system finish hibernate-restore before we
+# touch the Wi-Fi interface. Empirically reduces cascade frequency on long
+# sleeps. Saturation around 3 seconds — larger values do not measurably help.
+echo "$(TS) wakeup: waiting 3s before bringing up Wi-Fi" >> "$LOG"
+/bin/sleep 3
+
+# Stage 1: bring up the interface and force a clean re-association.
+echo "$(TS) wakeup: networksetup on (initial)" >> "$LOG"
+/usr/sbin/networksetup -setairportpower en0 on >> "$LOG" 2>&1
+"$AIRPORT" -z >> "$LOG" 2>&1
+
+# Stage 2: smart polling — wait up to 20 seconds for a stable IP.
+echo "$(TS) wakeup: smart polling up to 20s (need 5s stable)" >> "$LOG"
+stable=0
+last_ip=""
+for s in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    /bin/sleep 1
+    IP=$(check_ip)
+    if [ -n "$IP" ]; then
+        stable=$((stable + 1))
+        last_ip="$IP"
+        if [ "$stable" -ge 5 ]; then
+            echo "$(TS) wakeup: auto-recovery OK, IP $IP stable ${stable}s — exit" >> "$LOG"
+            exit 0
+        fi
+    else
+        if [ "$stable" -gt 0 ]; then
+            echo "$(TS) wakeup: IP lost after ${stable}s stability, resetting counter" >> "$LOG"
+        fi
+        stable=0
+    fi
+done
+
+echo "$(TS) wakeup: no stable auto-recovery in 20s, starting cascade" >> "$LOG"
+
+# Stage 3: cascade — up to 15 attempts of off→on+airport-z, with 10-second
+# pauses between attempts. In our data, when cascade is needed, it almost
+# always succeeds on try 1, occasionally try 2; never seen success after
+# try 3 — but we keep up to 15 as a safety margin.
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    echo "$(TS) wakeup: networksetup off (try $i)" >> "$LOG"
+    /usr/sbin/networksetup -setairportpower en0 off >> "$LOG" 2>&1
+    /bin/sleep 2
+    echo "$(TS) wakeup: networksetup on + airport -z (try $i)" >> "$LOG"
+    /usr/sbin/networksetup -setairportpower en0 on >> "$LOG" 2>&1
+    "$AIRPORT" -z >> "$LOG" 2>&1
+    /bin/sleep 6
+
+    IP=$(check_ip)
+    if [ -n "$IP" ]; then
+        echo "$(TS) wakeup: SUCCESS — IP $IP after networksetup try $i" >> "$LOG"
+        exit 0
+    fi
+    echo "$(TS) wakeup: no IP after networksetup try $i" >> "$LOG"
+
+    if [ "$i" -lt 15 ]; then
+        /bin/sleep 10
+    fi
+done
+
+# Stage 4: kill the userland Wi-Fi daemons and try once more.
+echo "$(TS) wakeup: cascade exhausted, killall airportd + bluetoothd" >> "$LOG"
+/usr/bin/killall airportd >> "$LOG" 2>&1
+/usr/bin/killall bluetoothd >> "$LOG" 2>&1
+/bin/sleep 3
+
+echo "$(TS) wakeup: networksetup off (after killall)" >> "$LOG"
+/usr/sbin/networksetup -setairportpower en0 off >> "$LOG" 2>&1
+/bin/sleep 2
+echo "$(TS) wakeup: networksetup on + airport -z (after killall)" >> "$LOG"
+/usr/sbin/networksetup -setairportpower en0 on >> "$LOG" 2>&1
+"$AIRPORT" -z >> "$LOG" 2>&1
+/bin/sleep 6
+
+IP=$(check_ip)
+if [ -n "$IP" ]; then
+    echo "$(TS) wakeup: SUCCESS — IP $IP after killall+networksetup" >> "$LOG"
+    exit 0
+fi
+
+# Stage 5: patient retry — give the driver more time to thaw.
+echo "$(TS) wakeup: starting patient stage (3 retries, 20s interval)" >> "$LOG"
+for i in 1 2 3; do
+    /bin/sleep 20
+    echo "$(TS) wakeup: patient retry $i — networksetup on + airport -z" >> "$LOG"
+    /usr/sbin/networksetup -setairportpower en0 on >> "$LOG" 2>&1
+    "$AIRPORT" -z >> "$LOG" 2>&1
+    /bin/sleep 6
+
+    IP=$(check_ip)
+    if [ -n "$IP" ]; then
+        echo "$(TS) wakeup: SUCCESS — IP $IP after patient retry $i" >> "$LOG"
+        exit 0
+    fi
+    echo "$(TS) wakeup: no IP after patient retry $i" >> "$LOG"
+done
+
+echo "$(TS) wakeup: FAILED — driver in deep hung state, manual reboot required" >> "$LOG"
+exit 1
