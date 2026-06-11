@@ -111,20 +111,26 @@ wakeup: auto-recovery OK, IP 192.168.x.y stable 5s — exit
 ## Recovery statistics
 
 Tested on MacBook Air 2015 (MacBookAir7,2), Monterey 12.7.6, with
-Broadcom BCM4350 Wi-Fi, over 12+ long sleeps (5–25 hours):
+Broadcom BCM4350 Wi-Fi. Sample: 165 wake events over ~5 weeks of daily
+use, including 11 long sleeps of 5+ hours (one up to 28 hours).
 
 | Outcome | Frequency | Recovery time |
 |---|---|---|
-| AUTO recovery | ~85–90% | 10–25 sec |
-| CASCADE recovery (force disassociate cycles) | ~5–10% on long sleeps, higher on shorter sleeps | 30–50 sec |
-| Deep hung (manual reboot required) | ~5–10% of long sleeps | — |
+| AUTO recovery | ~75–80% | 10–25 sec |
+| CASCADE recovery (force disassociate cycles) | ~15–20% | 30–50 sec |
+| Deep hung (manual reboot required) | ~5–10% | — |
 
-**Sleeps up to 25 hours** have been recovered cleanly. **Battery loss
+**Sleeps up to 28 hours** have been recovered cleanly. **Battery loss
 during hibernation is approximately 0% per hour** (`hibernatemode 25`
 powers everything off).
 
-These numbers are from a single machine and a small sample. Your mileage
-will vary depending on network conditions and Wi-Fi chip variant.
+The most recent 7 days (after pre-sleep timing was tuned to a 5-second
+pause and a 3-second post-wake delay) saw **0 cascades** across daily
+long sleeps — but a 7-day window is too small to claim that as the
+steady-state rate.
+
+These numbers are from a single machine. Your mileage will vary
+depending on Wi-Fi chip variant, network conditions, and sleep duration.
 
 ## Configuration
 
