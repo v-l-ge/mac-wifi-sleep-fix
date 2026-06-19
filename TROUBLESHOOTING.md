@@ -12,7 +12,7 @@ look like one of these patterns:
 wakeup: start
 wakeup: waiting 3s before bringing up Wi-Fi
 wakeup: networksetup on (initial)
-wakeup: smart polling up to 20s (need 5s stable)
+wakeup: smart polling up to 30s (need 5s stable)
 wakeup: auto-recovery OK, IP 192.168.X.Y stable 5s — exit
 ```
 Recovery time: typically 10–25 seconds.
@@ -20,7 +20,7 @@ Recovery time: typically 10–25 seconds.
 ### Cascade recovery (occasional — handled automatically)
 ```
 wakeup: ...
-wakeup: no stable auto-recovery in 20s, starting cascade
+wakeup: no stable auto-recovery in 30s, starting cascade
 wakeup: networksetup off (try 1)
 wakeup: networksetup on + airport -z (try 1)
 wakeup: SUCCESS — IP 192.168.X.Y after networksetup try 1

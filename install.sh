@@ -152,7 +152,7 @@ Expected wake events look like:
   wakeup: start
   wakeup: waiting 3s before bringing up Wi-Fi
   wakeup: networksetup on (initial)
-  wakeup: smart polling up to 20s (need 5s stable)
+  wakeup: smart polling up to 30s (need 5s stable)
   wakeup: auto-recovery OK, IP X.X.X.X stable 5s — exit
 
 If you see "starting cascade" — that's the fix doing its job for hung-on-association.

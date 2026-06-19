@@ -37,7 +37,7 @@ A `sleepwatcher`-driven shell script runs on every wake event:
 3. **Issues `airport -z`** (force disassociate) — the key command that
    breaks the chip out of the hung-on-association state by forcing a
    clean scan + new association.
-4. **Smart polling** for up to 20 seconds, requiring 5 consecutive seconds
+4. **Smart polling** for up to 30 seconds, requiring 5 consecutive seconds
    of stable IP before declaring success. (This filter rejects transient
    leases that get DHCP-NAK'd and disappear.)
 5. **Cascade**: if polling fails, up to 15 cycles of
@@ -104,7 +104,7 @@ You should see something like:
 wakeup: start
 wakeup: waiting 3s before bringing up Wi-Fi
 wakeup: networksetup on (initial)
-wakeup: smart polling up to 20s (need 5s stable)
+wakeup: smart polling up to 30s (need 5s stable)
 wakeup: auto-recovery OK, IP 192.168.x.y stable 5s — exit
 ```
 
